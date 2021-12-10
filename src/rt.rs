@@ -27,6 +27,16 @@ thread_local!(
 #[no_mangle]
 static mut ROOT_CONTEXT_P: *mut Context = ptr::null_mut();
 
+#[cfg(nightly)]
+pub unsafe fn get_root_context_p() -> *mut Context {
+    ROOT_CONTEXT_P
+}
+
+#[cfg(nightly)]
+pub unsafe fn set_root_context_p(ctx: *mut Context) {
+    ROOT_CONTEXT_P = ctx;
+}
+
 /// yield panic error types
 #[allow(dead_code)]
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
