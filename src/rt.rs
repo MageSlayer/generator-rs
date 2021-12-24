@@ -2,11 +2,13 @@
 //!
 //! generator run time context management
 //!
+use crate::reg_context::RegContext;
 use std::any::Any;
+use std::borrow::BorrowMut;
+use std::cell::Cell;
 use std::mem::MaybeUninit;
 use std::ptr;
-
-use crate::reg_context::RegContext;
+use std::thread::LocalKey;
 
 thread_local!(
     /// each thread has it's own generator context stack
@@ -23,18 +25,27 @@ thread_local!(
 // will be zero in generator context since the stack changed
 // to a different place, be careful about that.
 #[cfg(nightly)]
-#[thread_local]
-#[no_mangle]
-static mut ROOT_CONTEXT_P: *mut Context = ptr::null_mut();
+thread_local!(
+    #[thread_local]
+    #[no_mangle]
+    static ROOT_CONTEXT_P: Cell<*mut Context> = Cell::new(ptr::null_mut())
+);
 
+// Separate static reference for being used inside plugins since
+// dynamic libraries have own copy of TLS
+pub static mut ROOT_CONTEXT_P_REF: Option<&'static LocalKey<*mut Context>> = None;
+
+///
 #[cfg(nightly)]
-pub unsafe fn get_root_context_p() -> *mut Context {
-    ROOT_CONTEXT_P
+pub unsafe fn get_root_context_p_ref() -> &'static LocalKey<Cell<*mut Context>> {
+    let p_ref: &'static LocalKey<Cell<*mut Context>> = &ROOT_CONTEXT_P;
+    p_ref
 }
 
+///
 #[cfg(nightly)]
-pub unsafe fn set_root_context_p(ctx: *mut Context) {
-    ROOT_CONTEXT_P = ctx;
+pub unsafe fn set_root_context_p_ref(p_ref: &'static LocalKey<*mut Context>) {
+    ROOT_CONTEXT_P_REF = Some(p_ref);
 }
 
 /// yield panic error types
@@ -184,7 +195,7 @@ pub struct ContextStack {
 #[cfg(nightly)]
 #[inline(never)]
 unsafe fn init_root_p() {
-    ROOT_CONTEXT_P = ROOT_CONTEXT.with(|r| &**r as *const _ as *mut Context);
+    ROOT_CONTEXT_P.with(|r| r.set(ROOT_CONTEXT.with(|r| &**r as *const _ as *mut Context)));
 }
 
 impl ContextStack {
@@ -192,12 +203,15 @@ impl ContextStack {
     #[inline(never)]
     pub fn current() -> ContextStack {
         unsafe {
-            if ROOT_CONTEXT_P.is_null() {
-                init_root_p();
-            }
-            ContextStack {
-                root: ROOT_CONTEXT_P,
-            }
+            ROOT_CONTEXT_P.with(|root| {
+                if root.get().is_null() {
+                    match ROOT_CONTEXT_P_REF {
+                        Some(key) => key.with(|c| root.set(*c)),
+                        None => init_root_p(),
+                    }
+                }
+                ContextStack { root: root.get() }
+            })
         }
     }
 
