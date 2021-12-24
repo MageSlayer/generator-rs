@@ -33,7 +33,7 @@ thread_local!(
 
 // Separate static reference for being used inside plugins since
 // dynamic libraries have own copy of TLS
-pub static mut ROOT_CONTEXT_P_REF: Option<&'static LocalKey<*mut Context>> = None;
+pub static mut ROOT_CONTEXT_P_REF: Option<&'static LocalKey<Cell<*mut Context>>> = None;
 
 ///
 #[cfg(nightly)]
@@ -44,7 +44,7 @@ pub unsafe fn get_root_context_p_ref() -> &'static LocalKey<Cell<*mut Context>> 
 
 ///
 #[cfg(nightly)]
-pub unsafe fn set_root_context_p_ref(p_ref: &'static LocalKey<*mut Context>) {
+pub unsafe fn set_root_context_p_ref(p_ref: &'static LocalKey<Cell<*mut Context>>) {
     ROOT_CONTEXT_P_REF = Some(p_ref);
 }
 
@@ -206,7 +206,7 @@ impl ContextStack {
             ROOT_CONTEXT_P.with(|root| {
                 if root.get().is_null() {
                     match ROOT_CONTEXT_P_REF {
-                        Some(key) => key.with(|c| root.set(*c)),
+                        Some(key) => key.with(|c| root.set(c.get())),
                         None => init_root_p(),
                     }
                 }
