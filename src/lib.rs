@@ -28,4 +28,4 @@ pub use crate::yield_::{
 };
 
 #[cfg(nightly)]
-pub use crate::rt::{get_root_context_p, set_root_context_p, Context};
+pub use crate::rt::{get_root_context_p_ref, set_root_context_p_ref, Context};
